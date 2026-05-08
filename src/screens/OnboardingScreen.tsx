@@ -11,10 +11,14 @@ import {
   View,
 } from 'react-native';
 import Animated, {
+  Easing,
   FadeIn,
   FadeInDown,
   FadeInRight,
   FadeInUp,
+  useAnimatedStyle,
+  useSharedValue,
+  withTiming,
   ZoomIn,
 } from 'react-native-reanimated';
 
@@ -77,11 +81,22 @@ export default function OnboardingScreen() {
   const router = useRouter();
   const [activeIndex, setActiveIndex] = useState(0);
 
+  // Dissolve-out values (used when leaving on last slide)
+  const exitOp    = useSharedValue(1);
+  const exitScale = useSharedValue(1);
+  const exitStyle = useAnimatedStyle(() => ({
+    opacity:   exitOp.value,
+    transform: [{ scale: exitScale.value }],
+  }));
+
   const handleNext = () => {
     if (activeIndex < SLIDES.length - 1) {
       setActiveIndex(activeIndex + 1);
     } else {
-      router.replace('/');
+      // Dissolve out, then navigate to main
+      exitOp.value    = withTiming(0,    { duration: 700, easing: Easing.in(Easing.ease) });
+      exitScale.value = withTiming(0.92, { duration: 700, easing: Easing.in(Easing.ease) });
+      setTimeout(() => router.replace('/main'), 720);
     }
   };
 
@@ -95,6 +110,7 @@ export default function OnboardingScreen() {
   const bdDelay  = isFirst ? 600  : 220;
 
   return (
+    <Animated.View style={[{ flex: 1 }, exitStyle]}>
     <SafeAreaView style={styles.root}>
 
       {/* ── Header (animates once on mount, stays put) ── */}
@@ -197,6 +213,7 @@ export default function OnboardingScreen() {
       </Animated.View>
 
     </SafeAreaView>
+    </Animated.View>
   );
 }
 
