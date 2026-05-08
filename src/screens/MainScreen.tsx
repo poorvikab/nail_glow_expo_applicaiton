@@ -134,7 +134,7 @@ function BottomNav({
             key={item.label}
             style={styles.navItem}
             activeOpacity={0.75}
-            onPress={() => item.active && router.replace('/modal')}
+            onPress={() => item.active && router.replace('/studio')}
           >
             {item.active ? (
               <View style={styles.navActiveCircle}>
@@ -189,7 +189,7 @@ export default function MainScreen() {
           <Text style={styles.floatingLogo}>✦ NailGlow</Text>
           <TouchableOpacity
             style={styles.ctaSmall}
-            onPress={() => router.replace('/modal')}
+            onPress={() => router.replace('/studio')}
             activeOpacity={0.8}
           >
             <Text style={styles.ctaSmallText}>Try Now</Text>
@@ -265,7 +265,7 @@ export default function MainScreen() {
               <TouchableOpacity
                 style={styles.heroCta}
                 activeOpacity={0.85}
-                onPress={() => router.replace('/modal')}
+                onPress={() => router.replace('/studio')}
               >
                 <Text style={styles.heroCtaText}>Start Creating  →</Text>
               </TouchableOpacity>

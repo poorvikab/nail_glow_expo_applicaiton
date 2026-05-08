@@ -9,6 +9,7 @@ export default function RootLayout() {
         <Stack.Screen name="index" />
         <Stack.Screen name="onboarding" />
         <Stack.Screen name="main" />
+        <Stack.Screen name="studio" />
       </Stack>
       <StatusBar style="dark" backgroundColor="#FDE8EF" />
     </>

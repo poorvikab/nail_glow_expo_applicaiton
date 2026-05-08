@@ -122,7 +122,7 @@ export default function OnboardingScreen() {
           <Text style={styles.logoStar}>✦</Text>
           <Text style={styles.logoText}>NailGlow</Text>
         </View>
-        <TouchableOpacity onPress={() => router.replace('/')} accessibilityRole="button">
+        <TouchableOpacity onPress={() => router.replace('/main')} accessibilityRole="button">
           <Text style={styles.skip}>Skip</Text>
         </TouchableOpacity>
       </Animated.View>
