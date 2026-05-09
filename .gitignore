@@ -44,3 +44,4 @@ app-example
 
 .env
 backend/venv/
+backend/best_nail_model.pth
