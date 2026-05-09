@@ -1,260 +1,460 @@
+import * as FileSystem from 'expo-file-system';
 import * as ImagePicker from 'expo-image-picker';
+import * as MediaLibrary from 'expo-media-library';
 import { useRouter } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
+  ActivityIndicator,
+  Alert,
   Dimensions,
   Image,
+  Modal,
   Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
 } from 'react-native';
-import Animated, {
-  FadeIn,
-  FadeInDown,
-  FadeInUp,
-  ZoomIn,
-} from 'react-native-reanimated';
+import ColorPicker, {
+  HueSlider,
+  Panel1,
+  Preview,
+  returnedResults,
+} from 'reanimated-color-picker';
+import Animated, { FadeIn, FadeInDown, FadeInUp, ZoomIn, runOnJS } from 'react-native-reanimated';
 
-const { width, height } = Dimensions.get('window');
+const { width } = Dimensions.get('window');
 
 // ── Tokens ─────────────────────────────────────────────────────────────────────
-const BG         = '#FDE8EF';
-const ROSE       = '#B5445A';
-const ROSE_LIGHT = '#D4748A';
-const ROSE_MID   = '#C45A70';
-const DARK       = '#2A1010';
-const GLASS_BG   = 'rgba(255,255,255,0.30)';
-const GLASS_BDR  = 'rgba(255,255,255,0.65)';
-const SURFACE    = '#FFFFFF';
-const BORDER     = '#F0D8E0';
+const BG       = '#FDE8EF';
+const ROSE     = '#B5445A';
+const ROSE_MID = '#C45A70';
+const ROSE_DIM = '#9B6B78';
+const DARK     = '#2A1010';
+const WHITE    = '#FFFFFF';
+const GLASS    = 'rgba(255,255,255,0.80)';
+const BORDER   = 'rgba(181,68,90,0.18)';
 
-// ── Design images (1–8 from assets) ────────────────────────────────────────────
-const DESIGNS = [
-  { id: '1', label: 'Soft Rose',      image: require('../../assets/images/1.png') },
-  { id: '2', label: 'Gilded Nude',    image: require('../../assets/images/2.png') },
-  { id: '3', label: 'Berry Glam',     image: require('../../assets/images/3.png') },
-  { id: '4', label: 'Crystal Tips',   image: require('../../assets/images/4.png') },
-  { id: '5', label: 'Ombré Blush',    image: require('../../assets/images/5.png') },
-  { id: '6', label: 'French Luxe',    image: require('../../assets/images/6.png') },
-  { id: '7', label: 'Chrome Swirl',   image: require('../../assets/images/7.png') },
-  { id: '8', label: 'Velvet Noir',    image: require('../../assets/images/8.png') },
+// ── Preset colours (9 items → 5 top row, 4 + "+" bottom row) ─────────────────
+const PRESET_COLORS = [
+  '#F4A7B9', '#E84E7A', '#C45A70', '#2A1010', '#A8D8A8',
+  '#7BA7F5', '#FFD166', '#FFFFFF', '#C084FC',
 ];
 
-// ── Colour swatches ─────────────────────────────────────────────────────────────
-const COLOURS = [
-  { id: 'c1', hex: '#F4C2C2', label: 'Blush'    },
-  { id: 'c2', hex: '#E84E7A', label: 'Rose'     },
-  { id: 'c3', hex: '#B5445A', label: 'Berry'    },
-  { id: 'c4', hex: '#7BA7F5', label: 'Sky'      },
-  { id: 'c5', hex: '#FFD166', label: 'Honey'    },
-  { id: 'c6', hex: '#A8E6CF', label: 'Mint'     },
-  { id: 'c7', hex: '#C9B1FF', label: 'Lavender' },
-  { id: 'c8', hex: '#2A1010', label: 'Noir'     },
-  { id: 'c9', hex: '#FFFFFF', label: 'Pearl'    },
-  { id: 'ca', hex: '#D4AF37', label: 'Gold'     },
+// ── Preset patterns (9 items → 5 top row, 4 + "+" bottom row) ────────────────
+// Top row: 1,2,3,4,9  |  Bottom row: 5,6,7,10,+
+const PRESET_PATTERNS = [
+  { key: '1',  src: require('../../assets/images/1.png') },
+  { key: '2',  src: require('../../assets/images/2.png') },
+  { key: '3',  src: require('../../assets/images/3.png') },
+  { key: '4',  src: require('../../assets/images/4.png') },
+  { key: '9',  src: require('../../assets/images/9.png') },
+  { key: '5',  src: require('../../assets/images/5.png') },
+  { key: '6',  src: require('../../assets/images/6.png') },
+  { key: '7',  src: require('../../assets/images/7.png') },
+  { key: '10', src: require('../../assets/images/10.png') },
 ];
 
-// ── Design thumbnail ────────────────────────────────────────────────────────────
-function DesignThumb({
-  item,
-  selected,
-  onPress,
-}: {
-  item: typeof DESIGNS[0];
-  selected: boolean;
-  onPress: () => void;
-}) {
+const SWATCH = 52;
+const GAP    = 10;
+
+// ── Hex helpers ────────────────────────────────────────────────────────────────
+function normalizeHex(raw: string): string | null {
+  const c = raw.replace(/[^0-9a-fA-F]/g, '');
+  if (c.length === 3) return `#${c[0]}${c[0]}${c[1]}${c[1]}${c[2]}${c[2]}`;
+  if (c.length === 6) return `#${c}`;
+  return null;
+}
+
+// ── Color Picker Modal ─────────────────────────────────────────────────────────
+function ColorPickerModal({
+  visible, onClose, onSelect,
+}: { visible: boolean; onClose: () => void; onSelect: (hex: string) => void }) {
+  const [pickedHex, setPickedHex] = useState('#E84E7A');
+  const [hexInput,  setHexInput]  = useState('E84E7A');
+  const [hexValid,  setHexValid]  = useState(true);
+
+  // JS-thread state updater
+  const applyColor = useCallback((hex6: string) => {
+    setPickedHex(hex6);
+    setHexInput(hex6.replace('#', ''));
+    setHexValid(true);
+  }, []);
+
+  // Worklet — runs on UI thread; runOnJS bridges back to JS thread
+  const handleColorChange = useCallback((result: returnedResults) => {
+    'worklet';
+    const hex6 = result.hex.slice(0, 7);
+    runOnJS(applyColor)(hex6);
+  }, [applyColor]);
+
+  const handleHexInput = (text: string) => {
+    const cleaned = text.replace(/[^0-9a-fA-F]/g, '').slice(0, 6);
+    setHexInput(cleaned);
+    const parsed = normalizeHex(cleaned);
+    if (parsed) { setPickedHex(parsed); setHexValid(true); }
+    else { setHexValid(cleaned.length === 0); }
+  };
+
+  const handleApply = () => { onSelect(pickedHex); onClose(); };
+
   return (
-    <TouchableOpacity
-      style={[styles.thumb, selected && styles.thumbSelected]}
-      onPress={onPress}
-      activeOpacity={0.8}
-    >
-      <Image source={item.image} style={styles.thumbImg} resizeMode="cover" />
-      {selected && <View style={styles.thumbCheck}><Text style={styles.thumbCheckIcon}>✓</Text></View>}
-      <Text style={[styles.thumbLabel, selected && styles.thumbLabelSelected]} numberOfLines={1}>
-        {item.label}
-      </Text>
-    </TouchableOpacity>
+    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+      <TouchableWithoutFeedback onPress={onClose}>
+        <View style={mst.backdrop} />
+      </TouchableWithoutFeedback>
+
+      <View style={mst.sheet}>
+        <View style={mst.handle} />
+        <Text style={mst.title}>Pick a Colour</Text>
+
+        <ColorPicker
+          value={pickedHex}
+          onComplete={handleColorChange}
+          style={{ width: '100%', gap: 10 }}
+        >
+          <Panel1 style={mst.panel} />
+          <HueSlider style={mst.slider} />
+          <Preview style={mst.preview} hideInitialColor />
+        </ColorPicker>
+
+        <View style={mst.hexRow}>
+          <View style={[mst.swatch, { backgroundColor: pickedHex }]} />
+          <View style={[mst.hexWrap, !hexValid && { borderColor: '#E84E4E' }]}>
+            <Text style={mst.hash}>#</Text>
+            <TextInput
+              style={mst.hexInput}
+              value={hexInput}
+              onChangeText={handleHexInput}
+              placeholder="e.g. FF6B9D"
+              placeholderTextColor="#C4A0AC"
+              autoCapitalize="characters"
+              maxLength={6}
+            />
+          </View>
+        </View>
+
+        <View style={mst.btnRow}>
+          <TouchableOpacity style={mst.cancelBtn} onPress={onClose} activeOpacity={0.8}>
+            <Text style={mst.cancelTxt}>Cancel</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={mst.addBtn} onPress={handleApply} activeOpacity={0.8}>
+            <Text style={mst.addTxt}>Apply to Nails ✦</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </Modal>
   );
 }
 
 // ── Main Screen ────────────────────────────────────────────────────────────────
 export default function TryOnScreen() {
   const router = useRouter();
-  const [uploadedUri, setUploadedUri] = useState<string | null>(null);
-  const [selectedDesign, setSelectedDesign] = useState<string | null>(null);
-  const [selectedColour, setSelectedColour] = useState<string | null>(null);
 
-  // ── Image picker ─────────────────────────────────────────────────────────────
-  const pickFromGallery = async () => {
+  const [handPhoto,       setHandPhoto]   = useState<string | null>(null);
+  const [photoAspect,     setPhotoAspect] = useState(4 / 3);
+  const [selectedColor,   setSelectedColor]   = useState<string | null>(null);
+  const [selectedPattern, setSelectedPattern] = useState<string | null>(null);
+  const [customPatterns,  setCustomPatterns]  = useState<string[]>([]);
+  const [colorPickerOpen, setColorPickerOpen] = useState(false);
+  const [applying,        setApplying]        = useState(false);
+  const [resultPhoto,     setResultPhoto]     = useState<string | null>(null);
+
+  useEffect(() => {
+    if (handPhoto) {
+      Image.getSize(handPhoto, (w, h) => { if (h > 0) setPhotoAspect(w / h); });
+      setResultPhoto(null);
+    }
+  }, [handPhoto]);
+
+  // ── Core apply function: accepts explicit color/pattern so we don't rely on stale state
+  const applyDesign = async (color: string | null, patternKey: string | null) => {
+    if (!handPhoto) return;
+    setApplying(true);
+    try {
+      const form = new FormData();
+      const photoName = handPhoto.split('/').pop() ?? 'hand.jpg';
+      const photoType = photoName.endsWith('.png') ? 'image/png' : 'image/jpeg';
+      form.append('image', { uri: handPhoto, name: photoName, type: photoType } as any);
+      form.append('opacity', '0.82');
+
+      if (patternKey) {
+        const allPatterns = [
+          ...PRESET_PATTERNS,
+          ...customPatterns.map(uri => ({ key: `custom-${uri}`, src: { uri } })),
+        ];
+        const pat = allPatterns.find(p => p.key === patternKey);
+        if (pat) {
+          const src = pat.src as any;
+          const uri = src.uri ?? Image.resolveAssetSource(src).uri;
+          form.append('pattern', { uri, name: uri.split('/').pop() ?? 'pattern.png', type: 'image/png' } as any);
+        }
+      } else if (color) {
+        form.append('color', color);
+      }
+
+      const API = `${process.env.EXPO_PUBLIC_API_URL}/apply`;
+      const res = await fetch(API, { method: 'POST', body: form });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const json = await res.json();
+      setResultPhoto(`data:image/jpeg;base64,${json.result}`);
+    } catch (err: any) {
+      Alert.alert('Error', err.message ?? 'Could not connect to backend');
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  // ── Tap a preset colour → auto-apply
+  const handleSelectColor = (hex: string) => {
+    setSelectedColor(hex);
+    setSelectedPattern(null);
+    applyDesign(hex, null);
+  };
+
+  // ── Tap a preset pattern → auto-apply
+  const handleSelectPattern = (key: string) => {
+    setSelectedPattern(key);
+    setSelectedColor(null);
+    applyDesign(null, key);
+  };
+
+  // ── Colour wheel confirm → directly apply, no palette changes
+  const handleColorPickerSelect = (hex: string) => {
+    setSelectedColor(hex);
+    setSelectedPattern(null);
+    applyDesign(hex, null);
+  };
+
+  const pickHand = async (fromCamera = false) => {
+    if (fromCamera) {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') return;
+      const r = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [4, 3], quality: 0.9 });
+      if (!r.canceled) setHandPhoto(r.assets[0].uri);
+    } else {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') return;
+      const r = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [4, 3], quality: 0.9 });
+      if (!r.canceled) setHandPhoto(r.assets[0].uri);
+    }
+  };
+
+  const pickPattern = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (status !== 'granted') return;
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: true,
-      aspect: [4, 5],
-      quality: 0.9,
-    });
-    if (!result.canceled && result.assets.length > 0) {
-      setUploadedUri(result.assets[0].uri);
+    const r = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [1, 1], quality: 0.8 });
+    if (!r.canceled) {
+      const uri = r.assets[0].uri;
+      setCustomPatterns(p => [...p, uri]);
+      const key = `custom-${uri}`;
+      setSelectedPattern(key);
+      setSelectedColor(null);
+      applyDesign(null, key);
     }
   };
 
-  const takePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') return;
-    const result = await ImagePicker.launchCameraAsync({
-      allowsEditing: true,
-      aspect: [4, 5],
-      quality: 0.9,
-    });
-    if (!result.canceled && result.assets.length > 0) {
-      setUploadedUri(result.assets[0].uri);
+  const allPatterns = [
+    ...PRESET_PATTERNS,
+    ...customPatterns.map(uri => ({ key: `custom-${uri}`, src: { uri } })),
+  ];
+
+  // ── Grid helpers ─────────────────────────────────────────────────────────────
+  // Colors: row1 = 5 items, row2 = 4 items + "+"
+  const colorRow1 = PRESET_COLORS.slice(0, 5);
+  const colorRow2 = PRESET_COLORS.slice(5); // 4 items + "+"
+
+  // Patterns: row1 = 5 items (1,2,3,4,9), row2 = 4 items (5,6,7,10) + "+"
+  const patternRow1 = allPatterns.slice(0, 5);
+  const patternRow2 = allPatterns.slice(5, 9); // up to 4 items + "+"
+
+  // ── Save result image to camera roll ─────────────────────────────────────────
+  const saveImage = async () => {
+    if (!resultPhoto) {
+      Alert.alert('Nothing to save', 'Apply a design first to get a result.');
+      return;
+    }
+    const { status } = await MediaLibrary.requestPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission required', 'Allow photo library access to save your design.');
+      return;
+    }
+    try {
+      const base64 = resultPhoto.replace(/^data:image\/\w+;base64,/, '');
+      const fileUri = (FileSystem.cacheDirectory ?? '') + `nailglow_${Date.now()}.jpg`;
+      await FileSystem.writeAsStringAsync(fileUri, base64, {
+        encoding: FileSystem.EncodingType.Base64,
+      });
+      await MediaLibrary.saveToLibraryAsync(fileUri);
+      Alert.alert('Saved ✓', 'Your nail design has been saved to your gallery!');
+    } catch (err: any) {
+      Alert.alert('Error', err.message ?? 'Could not save image');
     }
   };
 
-  const hasImage = !!uploadedUri;
+  const renderColorCircle = (hex: string) => {
+    const sel = selectedColor === hex;
+    const isLight = ['#FFFFFF', '#FFD166', '#A8D8A8', '#7BA7F5', '#F5F5F5'].includes(hex);
+    return (
+      <View key={hex} style={[styles.ringWrap, sel && styles.ringWrapSelected]}>
+        <TouchableOpacity
+          style={[styles.colorCircle, { backgroundColor: hex }, hex === '#FFFFFF' && styles.colorCircleWhite]}
+          onPress={() => handleSelectColor(hex)}
+          activeOpacity={0.8}
+        >
+          {sel && !applying && <Text style={[styles.checkMark, { color: isLight ? DARK : WHITE }]}>✓</Text>}
+          {sel && applying && <ActivityIndicator size="small" color={isLight ? DARK : WHITE} />}
+        </TouchableOpacity>
+      </View>
+    );
+  };
+
+  const renderPatternCircle = (p: { key: string; src: any }) => {
+    const sel = selectedPattern === p.key;
+    return (
+      <View key={p.key} style={[styles.ringWrap, sel && styles.ringWrapSelected]}>
+        <TouchableOpacity style={styles.patternCircle} onPress={() => handleSelectPattern(p.key)} activeOpacity={0.8}>
+          <Image source={p.src as any} style={styles.patternImg} resizeMode="cover" />
+          {sel && (
+            <View style={styles.patternOverlay}>
+              {applying
+                ? <ActivityIndicator size="small" color={WHITE} />
+                : <Text style={styles.checkMark}>✓</Text>}
+            </View>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle="dark-content" backgroundColor={BG} />
 
+      <ColorPickerModal
+        visible={colorPickerOpen}
+        onClose={() => setColorPickerOpen(false)}
+        onSelect={handleColorPickerSelect}
+      />
+
       {/* ── Header ── */}
-      <Animated.View entering={FadeInDown.delay(0).duration(400)} style={styles.header}>
+      <Animated.View entering={FadeInDown.duration(380)} style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.replace('/main')} activeOpacity={0.8}>
-          <Text style={styles.backIcon}>←</Text>
+          <Text style={styles.backIcon}>‹</Text>
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>AR Try-On</Text>
-        <View style={styles.headerStar}>
-          <Text style={styles.starGlyph}>✦</Text>
-        </View>
+        <Text style={styles.headerTitle}>✦  Try On</Text>
+        {/* Global applying spinner */}
+        {applying
+          ? <ActivityIndicator color={ROSE} size="small" style={{ width: 40 }} />
+          : <View style={{ width: 40 }} />}
       </Animated.View>
 
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.scroll}
-        bounces
-      >
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scroll}>
 
-        {/* ═══════════════════════════════════════════════
-            UPLOAD ZONE
-        ════════════════════════════════════════════════ */}
-        <Animated.View entering={FadeInUp.delay(120).duration(450).springify()}>
-          {!hasImage ? (
-            /* ── Empty state ── */
-            <View style={styles.uploadCard}>
-              {/* Dashed border ring */}
-              <View style={styles.uploadInner}>
-                <Animated.Text entering={ZoomIn.delay(300).springify()} style={styles.uploadEmoji}>
-                  💅
-                </Animated.Text>
-                <Text style={styles.uploadTitle}>Upload Your Hand Photo</Text>
-                <Text style={styles.uploadSub}>
-                  Take or select a clear photo of your hand so we can apply nail designs in real time.
-                </Text>
-
-                <View style={styles.uploadBtnRow}>
-                  <TouchableOpacity style={styles.uploadBtn} onPress={takePhoto} activeOpacity={0.85}>
-                    <Text style={styles.uploadBtnIcon}>📷</Text>
-                    <Text style={styles.uploadBtnText}>Camera</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity style={[styles.uploadBtn, styles.uploadBtnSecondary]} onPress={pickFromGallery} activeOpacity={0.85}>
-                    <Text style={styles.uploadBtnIcon}>🖼️</Text>
-                    <Text style={[styles.uploadBtnText, styles.uploadBtnTextSecondary]}>Gallery</Text>
-                  </TouchableOpacity>
-                </View>
+        {/* ── Upload / Preview ── */}
+        <Animated.View entering={FadeInUp.delay(80).duration(420).springify()}>
+          {!handPhoto ? (
+            <View style={styles.uploadZone}>
+              <View style={styles.uploadIconRing}>
+                <Text style={styles.uploadEmoji}>🤳</Text>
+              </View>
+              <Text style={styles.uploadTitle}>Upload a photo of your hand</Text>
+              <Text style={styles.uploadSub}>Take a clear photo or pick one from your gallery</Text>
+              <View style={styles.uploadActions}>
+                <TouchableOpacity style={styles.uploadBtn} onPress={() => pickHand(true)} activeOpacity={0.85}>
+                  <Text style={styles.uploadBtnIcon}>📷</Text>
+                  <Text style={styles.uploadBtnText}>Camera</Text>
+                </TouchableOpacity>
+                <View style={styles.uploadDivider} />
+                <TouchableOpacity style={styles.uploadBtn} onPress={() => pickHand(false)} activeOpacity={0.85}>
+                  <Text style={styles.uploadBtnIcon}>🖼</Text>
+                  <Text style={styles.uploadBtnText}>Gallery</Text>
+                </TouchableOpacity>
               </View>
             </View>
           ) : (
-            /* ── Uploaded image preview ── */
-            <Animated.View entering={FadeIn.duration(400)} style={styles.previewCard}>
+            <Animated.View entering={ZoomIn.springify()} style={[styles.previewWrap, { aspectRatio: photoAspect }]}>
               <Image
-                source={{ uri: uploadedUri }}
-                style={styles.previewImage}
-                resizeMode="cover"
+                source={{ uri: resultPhoto ?? handPhoto! }}
+                style={styles.previewImg}
+                resizeMode="contain"
               />
-              {/* Overlay badge */}
-              <View style={styles.previewBadge}>
-                <Text style={styles.previewBadgeText}>✦  Your Hand</Text>
+              {applying && (
+                <View style={styles.applyingOverlay}>
+                  <ActivityIndicator color={WHITE} size="large" />
+                  <Text style={styles.applyingText}>Applying…</Text>
+                </View>
+              )}
+              <View style={styles.previewTopRow}>
+                <View style={styles.previewBadge}>
+                  <Text style={styles.previewBadgeText}>
+                    {resultPhoto ? '✦  Result' : '✦  Your Hand'}
+                  </Text>
+                </View>
+                <TouchableOpacity style={styles.retakeBtn} onPress={() => pickHand(false)} activeOpacity={0.8}>
+                  <Text style={styles.retakeText}>Change</Text>
+                </TouchableOpacity>
               </View>
-              {/* Change photo */}
-              <TouchableOpacity style={styles.changeBtn} onPress={() => setUploadedUri(null)} activeOpacity={0.8}>
-                <Text style={styles.changeBtnText}>Change Photo</Text>
-              </TouchableOpacity>
             </Animated.View>
           )}
         </Animated.View>
 
-        {/* ═══════════════════════════════════════════════
-            OPTIONS (shown after upload)
-        ════════════════════════════════════════════════ */}
-        {hasImage && (
-          <Animated.View entering={FadeInUp.delay(80).duration(420).springify()}>
+        {/* ── Colour Grid ── */}
+        <Animated.View entering={FadeIn.delay(160).duration(380)} style={styles.section}>
+          <Text style={styles.sectionTitle}>Choose a Colour</Text>
 
-            {/* ── Colour Picker ── */}
-            <View style={styles.sectionBlock}>
-              <Text style={styles.sectionTitle}>Pick a Colour</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.colourRow}>
-                {COLOURS.map((col) => {
-                  const active = selectedColour === col.id;
-                  return (
-                    <TouchableOpacity
-                      key={col.id}
-                      onPress={() => setSelectedColour(col.id)}
-                      activeOpacity={0.8}
-                      style={styles.swatchWrap}
-                    >
-                      <View style={[
-                        styles.swatch,
-                        { backgroundColor: col.hex },
-                        active && styles.swatchActive,
-                        col.hex === '#FFFFFF' && styles.swatchWhiteBorder,
-                      ]} />
-                      <Text style={[styles.swatchLabel, active && styles.swatchLabelActive]}>
-                        {col.label}
-                      </Text>
-                    </TouchableOpacity>
-                  );
-                })}
-              </ScrollView>
-            </View>
+          {/* Row 1: 5 colours */}
+          <View style={styles.gridRow}>
+            {colorRow1.map(renderColorCircle)}
+          </View>
 
-            {/* ── Design Picker ── */}
-            <View style={styles.sectionBlock}>
-              <Text style={styles.sectionTitle}>Choose a Design</Text>
-              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.designRow}>
-                {DESIGNS.map((d) => (
-                  <DesignThumb
-                    key={d.id}
-                    item={d}
-                    selected={selectedDesign === d.id}
-                    onPress={() => setSelectedDesign(d.id)}
-                  />
-                ))}
-              </ScrollView>
-            </View>
-
-            {/* ── Apply CTA ── */}
-            <TouchableOpacity
-              style={[
-                styles.applyCta,
-                (!selectedDesign && !selectedColour) && styles.applyCtaDisabled,
-              ]}
-              activeOpacity={0.85}
-              disabled={!selectedDesign && !selectedColour}
-            >
-              <Text style={styles.applyCtaText}>✦  Apply to Nails</Text>
+          {/* Row 2: 3 colours + "+" */}
+          <View style={[styles.gridRow, { marginTop: GAP }]}>
+            {colorRow2.map(renderColorCircle)}
+            <TouchableOpacity style={styles.plusCircle} onPress={() => setColorPickerOpen(true)} activeOpacity={0.8}>
+              <Text style={styles.plusIcon}>+</Text>
             </TouchableOpacity>
+          </View>
+        </Animated.View>
 
+        {/* ── Pattern Grid ── */}
+        <Animated.View entering={FadeIn.delay(240).duration(380)} style={styles.section}>
+          <Text style={styles.sectionTitle}>Choose a Pattern</Text>
+
+          {/* Row 1: 5 patterns (1,2,3,4,9) */}
+          <View style={styles.gridRow}>
+            {patternRow1.map(renderPatternCircle)}
+          </View>
+
+          {/* Row 2: up to 4 patterns (5,6,7,10) + "+" */}
+          <View style={[styles.gridRow, { marginTop: GAP }]}>
+            {patternRow2.map(renderPatternCircle)}
+            <TouchableOpacity style={styles.plusCircle} onPress={pickPattern} activeOpacity={0.8}>
+              <Text style={styles.plusIcon}>+</Text>
+            </TouchableOpacity>
+          </View>
+        </Animated.View>
+
+        {/* ── Save Button ── */}
+        {resultPhoto && (
+          <Animated.View entering={FadeInUp.duration(320)} style={styles.saveWrap}>
+            <TouchableOpacity style={styles.saveBtn} onPress={saveImage} activeOpacity={0.87}>
+              <Text style={styles.saveBtnText}>Save Design</Text>
+            </TouchableOpacity>
           </Animated.View>
         )}
+
+        {/* ── Tagline ── */}
+        <View style={styles.taglineWrap}>
+          <View style={styles.taglineLine} />
+          <Text style={styles.tagline}>Craft  ·  Glow  ·  Shine</Text>
+          <View style={styles.taglineLine} />
+        </View>
 
         <View style={{ height: 32 }} />
       </ScrollView>
@@ -262,261 +462,170 @@ export default function TryOnScreen() {
   );
 }
 
-// ── Styles ─────────────────────────────────────────────────────────────────────
-const UPLOAD_H = height * 0.42;
-const PREVIEW_H = height * 0.38;
-
+// ── Main Styles ────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  root: {
-    flex: 1,
-    backgroundColor: BG,
-    paddingTop: Platform.OS === 'android' ? 32 : 0,
-  },
+  root: { flex: 1, backgroundColor: BG, paddingTop: Platform.OS === 'android' ? 32 : 0 },
 
-  // Header
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    paddingHorizontal: 16, paddingVertical: 12,
   },
   backBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: SURFACE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderWidth: 1,
-    borderColor: BORDER,
+    width: 40, height: 40, borderRadius: 20,
+    backgroundColor: GLASS, borderWidth: 1, borderColor: BORDER,
+    alignItems: 'center', justifyContent: 'center',
   },
-  backIcon: { fontSize: 18, color: ROSE, fontWeight: '700' },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: DARK,
-    letterSpacing: 0.3,
-  },
-  headerStar: {
-    width: 38,
-    height: 38,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  starGlyph: { fontSize: 20, color: ROSE_LIGHT },
+  backIcon: { fontSize: 28, color: ROSE, lineHeight: 34, fontWeight: '300' },
+  headerTitle: { fontSize: 17, fontWeight: '800', color: DARK, letterSpacing: 0.3 },
 
-  scroll: {
-    paddingHorizontal: 20,
-    paddingTop: 4,
-  },
+  scroll: { paddingHorizontal: 20, paddingTop: 8 },
 
-  // Upload card
-  uploadCard: {
-    height: UPLOAD_H,
-    borderRadius: 28,
-    borderWidth: 2,
-    borderColor: ROSE_LIGHT,
-    borderStyle: 'dashed',
-    backgroundColor: 'rgba(255,255,255,0.60)',
-    overflow: 'hidden',
-    marginBottom: 24,
+  // Upload
+  uploadZone: {
+    backgroundColor: WHITE, borderRadius: 28,
+    borderWidth: 1.8, borderColor: BORDER, borderStyle: 'dashed',
+    alignItems: 'center', paddingVertical: 36, paddingHorizontal: 24, marginBottom: 28,
   },
-  uploadInner: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 28,
-    gap: 10,
+  uploadIconRing: {
+    width: 80, height: 80, borderRadius: 40, backgroundColor: '#FFE4EE',
+    alignItems: 'center', justifyContent: 'center', marginBottom: 18,
   },
-  uploadEmoji: { fontSize: 52, marginBottom: 4 },
-  uploadTitle: {
-    fontSize: 20,
-    fontWeight: '800',
-    color: DARK,
-    textAlign: 'center',
-  },
-  uploadSub: {
-    fontSize: 13,
-    color: ROSE_LIGHT,
-    textAlign: 'center',
-    lineHeight: 20,
-    marginBottom: 8,
-  },
-  uploadBtnRow: {
-    flexDirection: 'row',
-    gap: 12,
-    marginTop: 8,
+  uploadEmoji: { fontSize: 36 },
+  uploadTitle: { fontSize: 17, fontWeight: '800', color: DARK, textAlign: 'center', marginBottom: 8 },
+  uploadSub: { fontSize: 13, color: ROSE_DIM, textAlign: 'center', lineHeight: 20, maxWidth: 260, marginBottom: 28 },
+  uploadActions: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: '#FDE8EF', borderRadius: 50, overflow: 'hidden',
+    borderWidth: 1, borderColor: BORDER,
   },
   uploadBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    backgroundColor: ROSE_MID,
-    borderRadius: 50,
-    paddingHorizontal: 22,
-    paddingVertical: 13,
-    shadowColor: ROSE,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.28,
-    shadowRadius: 10,
-    elevation: 6,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
+    gap: 8, paddingVertical: 14, paddingHorizontal: 20,
   },
-  uploadBtnSecondary: {
-    backgroundColor: SURFACE,
-    borderWidth: 1.5,
-    borderColor: BORDER,
-    shadowOpacity: 0.08,
-  },
+  uploadDivider: { width: 1, height: 28, backgroundColor: BORDER },
   uploadBtnIcon: { fontSize: 18 },
-  uploadBtnText: { fontSize: 14, fontWeight: '700', color: '#fff' },
-  uploadBtnTextSecondary: { color: ROSE_MID },
+  uploadBtnText: { fontSize: 14, fontWeight: '700', color: ROSE_MID },
 
   // Preview
-  previewCard: {
-    height: PREVIEW_H,
-    borderRadius: 28,
-    overflow: 'hidden',
-    marginBottom: 20,
-    shadowColor: ROSE,
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.20,
-    shadowRadius: 20,
-    elevation: 10,
+  previewWrap: {
+    borderRadius: 24, overflow: 'hidden',
+    width: '100%', marginBottom: 28,
+    backgroundColor: '#1a0808',
+    shadowColor: ROSE, shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.16, shadowRadius: 18, elevation: 8,
   },
-  previewImage: { width: '100%', height: '100%' },
-  previewBadge: {
-    position: 'absolute',
-    top: 14,
-    left: 14,
-    backgroundColor: GLASS_BG,
-    borderWidth: 1,
-    borderColor: GLASS_BDR,
-    borderRadius: 50,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
+  previewImg: { width: '100%', height: '100%' },
+  applyingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(0,0,0,0.38)',
+    alignItems: 'center', justifyContent: 'center', gap: 10,
   },
-  previewBadgeText: { color: '#fff', fontSize: 12, fontWeight: '700', letterSpacing: 1.2 },
-  changeBtn: {
-    position: 'absolute',
-    bottom: 14,
-    right: 14,
-    backgroundColor: 'rgba(255,255,255,0.88)',
-    borderRadius: 50,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderWidth: 1,
-    borderColor: BORDER,
+  applyingText: { color: WHITE, fontSize: 14, fontWeight: '700' },
+  previewTopRow: {
+    position: 'absolute', top: 14, left: 14, right: 14,
+    flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
   },
-  changeBtnText: { fontSize: 12, fontWeight: '700', color: ROSE_MID },
+  previewBadge: { backgroundColor: 'rgba(255,255,255,0.88)', borderRadius: 50, paddingHorizontal: 14, paddingVertical: 7 },
+  previewBadgeText: { fontSize: 12, fontWeight: '700', color: ROSE, letterSpacing: 0.5 },
+  retakeBtn: { backgroundColor: 'rgba(0,0,0,0.42)', borderRadius: 50, paddingHorizontal: 14, paddingVertical: 7 },
+  retakeText: { fontSize: 12, fontWeight: '700', color: WHITE },
 
   // Sections
-  sectionBlock: {
-    marginBottom: 22,
-  },
-  sectionTitle: {
-    fontSize: 15,
-    fontWeight: '800',
-    color: DARK,
-    marginBottom: 12,
-    letterSpacing: 0.2,
-  },
+  section: { marginBottom: 28 },
+  sectionTitle: { fontSize: 15, fontWeight: '800', color: DARK, marginBottom: 14, letterSpacing: 0.2 },
 
-  // Colour swatches
-  colourRow: {
-    gap: 10,
-    paddingBottom: 4,
-    paddingRight: 4,
-  },
-  swatchWrap: { alignItems: 'center', gap: 5 },
-  swatch: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    borderWidth: 2.5,
-    borderColor: 'transparent',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.10,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  swatchActive: {
-    borderColor: ROSE,
-    transform: [{ scale: 1.15 }],
-  },
-  swatchWhiteBorder: {
-    borderColor: BORDER,
-  },
-  swatchLabel: { fontSize: 9.5, color: ROSE_LIGHT, fontWeight: '500' },
-  swatchLabelActive: { color: ROSE, fontWeight: '800' },
-
-  // Design thumbs
-  designRow: {
-    gap: 12,
-    paddingBottom: 4,
-    paddingRight: 4,
-  },
-  thumb: {
-    width: 90,
-    borderRadius: 16,
-    overflow: 'hidden',
-    borderWidth: 2.5,
-    borderColor: 'transparent',
-    backgroundColor: SURFACE,
-    shadowColor: ROSE,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.10,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  thumbSelected: {
-    borderColor: ROSE_MID,
-  },
-  thumbImg: { width: '100%', height: 90 },
-  thumbCheck: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: ROSE_MID,
+  // Grid rows (flexDirection: row, wraps naturally)
+  gridRow: {
+    flexDirection: 'row',
+    gap: GAP,
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  thumbCheckIcon: { color: '#fff', fontSize: 12, fontWeight: '800' },
-  thumbLabel: {
-    fontSize: 10.5,
-    fontWeight: '600',
-    color: DARK,
-    textAlign: 'center',
-    paddingVertical: 6,
-    paddingHorizontal: 4,
-  },
-  thumbLabelSelected: { color: ROSE_MID, fontWeight: '800' },
 
-  // Apply CTA
-  applyCta: {
-    backgroundColor: ROSE,
-    borderRadius: 50,
-    paddingVertical: 17,
+  // Ring wrapper
+  ringWrap: {
+    borderRadius: (SWATCH + 8) / 2, padding: 3,
+    borderWidth: 2.5, borderColor: 'transparent',
+  },
+  ringWrapSelected: { borderColor: ROSE_MID },
+
+  colorCircle: {
+    width: SWATCH, height: SWATCH, borderRadius: SWATCH / 2,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  colorCircleWhite: { borderWidth: 1, borderColor: BORDER },
+  checkMark: { fontSize: 17, fontWeight: '900', color: WHITE },
+
+  patternCircle: { width: SWATCH, height: SWATCH, borderRadius: SWATCH / 2, overflow: 'hidden' },
+  patternImg: { width: '100%', height: '100%' },
+  patternOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(181,68,90,0.55)',
+    alignItems: 'center', justifyContent: 'center',
+  },
+
+  plusCircle: {
+    width: SWATCH, height: SWATCH, borderRadius: SWATCH / 2,
+    borderWidth: 2, borderColor: ROSE_MID, borderStyle: 'dashed',
+    alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFE8F0',
+  },
+  plusIcon: { fontSize: 26, color: ROSE_MID, lineHeight: 30, fontWeight: '300' },
+
+  // Save button
+  saveWrap: { marginBottom: 12 },
+  saveBtn: {
+    backgroundColor: ROSE_MID, borderRadius: 50, paddingVertical: 15,
     alignItems: 'center',
-    marginTop: 8,
-    shadowColor: ROSE,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 14,
-    elevation: 8,
+    shadowColor: ROSE, shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.28, shadowRadius: 14, elevation: 7,
   },
-  applyCtaDisabled: {
-    backgroundColor: '#D4B0BA',
-    shadowOpacity: 0.10,
+  saveBtnText: { fontSize: 15, fontWeight: '800', color: WHITE, letterSpacing: 0.6 },
+
+  // Tagline — elegant italic with flanking lines
+  taglineWrap: {
+    flexDirection: 'row', alignItems: 'center',
+    justifyContent: 'center', gap: 10,
+    marginTop: 4, marginBottom: 4,
   },
-  applyCtaText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '800',
-    letterSpacing: 0.8,
+  taglineLine: { flex: 1, height: 0.8, backgroundColor: 'rgba(181,68,90,0.22)' },
+  tagline: {
+    fontSize: 13,
+    fontWeight: '300',
+    fontStyle: 'italic',
+    color: ROSE_MID,
+    letterSpacing: 2.5,
   },
+  taglineDot: { fontSize: 10, color: ROSE_MID },
+});
+
+// ── Modal Styles ───────────────────────────────────────────────────────────────
+const mst = StyleSheet.create({
+  backdrop: { flex: 1, backgroundColor: 'rgba(42,16,16,0.45)' },
+  sheet: {
+    backgroundColor: WHITE,
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingHorizontal: 18,
+    paddingBottom: Platform.OS === 'ios' ? 34 : 22,
+    paddingTop: 12,
+  },
+  handle: { width: 40, height: 4, borderRadius: 2, backgroundColor: '#D4748A', alignSelf: 'center', marginBottom: 10 },
+  title: { fontSize: 16, fontWeight: '800', color: DARK, marginBottom: 12, textAlign: 'center' },
+
+  panel: { height: 180, borderRadius: 14 },
+  slider: { height: 24, borderRadius: 12 },
+  preview: { height: 36, borderRadius: 10 },
+
+  hexRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 10, marginBottom: 14 },
+  swatch: { width: 40, height: 40, borderRadius: 20, borderWidth: 1.5, borderColor: BORDER },
+  hexWrap: {
+    flex: 1, height: 40, borderRadius: 12, borderWidth: 1.5, borderColor: BORDER,
+    backgroundColor: '#FFF5F8', flexDirection: 'row', alignItems: 'center', paddingHorizontal: 11,
+  },
+  hash: { fontSize: 15, fontWeight: '700', color: ROSE_DIM, marginRight: 2 },
+  hexInput: { flex: 1, height: 40, fontSize: 14, fontWeight: '600', color: DARK },
+
+  btnRow: { flexDirection: 'row', gap: 10 },
+  cancelBtn: { flex: 1, backgroundColor: '#FDE8EF', borderRadius: 50, paddingVertical: 13, alignItems: 'center' },
+  cancelTxt: { fontSize: 14, fontWeight: '700', color: ROSE_MID },
+  addBtn: { flex: 1, backgroundColor: ROSE, borderRadius: 50, paddingVertical: 13, alignItems: 'center' },
+  addTxt: { fontSize: 14, fontWeight: '700', color: WHITE },
 });
