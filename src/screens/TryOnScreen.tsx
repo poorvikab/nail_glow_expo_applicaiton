@@ -164,6 +164,7 @@ export default function TryOnScreen() {
   const [colorPickerOpen, setColorPickerOpen] = useState(false);
   const [applying,        setApplying]        = useState(false);
   const [resultPhoto,     setResultPhoto]     = useState<string | null>(null);
+  const [changePhotoVisible, setChangePhotoVisible] = useState(false);
 
   useEffect(() => {
     if (handPhoto) {
@@ -342,6 +343,39 @@ export default function TryOnScreen() {
         onSelect={handleColorPickerSelect}
       />
 
+      {/* ── Change Photo Sheet ── */}
+      <Modal visible={changePhotoVisible} transparent animationType="fade" onRequestClose={() => setChangePhotoVisible(false)}>
+        <TouchableWithoutFeedback onPress={() => setChangePhotoVisible(false)}>
+          <View style={cst.backdrop} />
+        </TouchableWithoutFeedback>
+        <View style={cst.card}>
+          <View style={cst.handle} />
+          <Text style={cst.title}>Change Photo</Text>
+          <TouchableOpacity
+            style={cst.option}
+            activeOpacity={0.8}
+            onPress={() => { setChangePhotoVisible(false); pickHand(true); }}
+          >
+            <Text style={cst.optionText}>Camera</Text>
+          </TouchableOpacity>
+          <View style={cst.divider} />
+          <TouchableOpacity
+            style={cst.option}
+            activeOpacity={0.8}
+            onPress={() => { setChangePhotoVisible(false); pickHand(false); }}
+          >
+            <Text style={cst.optionText}>Gallery</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={cst.cancelBtn}
+            activeOpacity={0.8}
+            onPress={() => setChangePhotoVisible(false)}
+          >
+            <Text style={cst.cancelTxt}>Cancel</Text>
+          </TouchableOpacity>
+        </View>
+      </Modal>
+
       {/* ── Header ── */}
       <Animated.View entering={FadeInDown.duration(380)} style={styles.header}>
         <TouchableOpacity style={styles.backBtn} onPress={() => router.replace('/main')} activeOpacity={0.8}>
@@ -396,7 +430,11 @@ export default function TryOnScreen() {
                     {resultPhoto ? '✦  Result' : '✦  Your Hand'}
                   </Text>
                 </View>
-                <TouchableOpacity style={styles.retakeBtn} onPress={() => pickHand(false)} activeOpacity={0.8}>
+                <TouchableOpacity
+                  style={styles.retakeBtn}
+                  activeOpacity={0.8}
+                  onPress={() => setChangePhotoVisible(true)}
+                >
                   <Text style={styles.retakeText}>Change</Text>
                 </TouchableOpacity>
               </View>
@@ -450,11 +488,7 @@ export default function TryOnScreen() {
         )}
 
         {/* ── Tagline ── */}
-        <View style={styles.taglineWrap}>
-          <View style={styles.taglineLine} />
-          <Text style={styles.tagline}>Craft  ·  Glow  ·  Shine</Text>
-          <View style={styles.taglineLine} />
-        </View>
+        <Text style={styles.tagline}>CRAFT · GLOW · SHINE</Text>
 
         <View style={{ height: 32 }} />
       </ScrollView>
@@ -580,21 +614,15 @@ const styles = StyleSheet.create({
   },
   saveBtnText: { fontSize: 15, fontWeight: '800', color: WHITE, letterSpacing: 0.6 },
 
-  // Tagline — elegant italic with flanking lines
-  taglineWrap: {
-    flexDirection: 'row', alignItems: 'center',
-    justifyContent: 'center', gap: 10,
-    marginTop: 4, marginBottom: 4,
-  },
-  taglineLine: { flex: 1, height: 0.8, backgroundColor: 'rgba(181,68,90,0.22)' },
+  // Tagline — matches MainScreen footer style
   tagline: {
-    fontSize: 13,
-    fontWeight: '300',
-    fontStyle: 'italic',
-    color: ROSE_MID,
+    textAlign: 'center',
+    fontSize: 11,
+    color: ROSE_DIM,
     letterSpacing: 2.5,
+    marginTop: 20,
+    marginBottom: 12,
   },
-  taglineDot: { fontSize: 10, color: ROSE_MID },
 });
 
 // ── Modal Styles ───────────────────────────────────────────────────────────────
@@ -628,4 +656,47 @@ const mst = StyleSheet.create({
   cancelTxt: { fontSize: 14, fontWeight: '700', color: ROSE_MID },
   addBtn: { flex: 1, backgroundColor: ROSE, borderRadius: 50, paddingVertical: 13, alignItems: 'center' },
   addTxt: { fontSize: 14, fontWeight: '700', color: WHITE },
+});
+
+// ── Change Photo Modal Styles ──────────────────────────────────────────────────
+const cst = StyleSheet.create({
+  backdrop: {
+    flex: 1, backgroundColor: 'rgba(42,16,16,0.50)',
+  },
+  card: {
+    backgroundColor: '#FFF0F5',
+    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    paddingHorizontal: 20,
+    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
+    paddingTop: 14,
+    borderTopWidth: 1.5, borderColor: 'rgba(181,68,90,0.15)',
+  },
+  handle: {
+    width: 38, height: 4, borderRadius: 2,
+    backgroundColor: '#D4748A', alignSelf: 'center', marginBottom: 16,
+  },
+  title: {
+    fontSize: 15, fontWeight: '800', color: '#2A1010',
+    textAlign: 'center', marginBottom: 16, letterSpacing: 0.3,
+  },
+  option: {
+    paddingVertical: 15, alignItems: 'center',
+    backgroundColor: '#FFE8F2',
+    borderRadius: 16,
+    borderWidth: 1, borderColor: 'rgba(181,68,90,0.18)',
+  },
+  optionText: {
+    fontSize: 15, fontWeight: '700', color: '#B5445A',
+  },
+  divider: {
+    height: 10,
+  },
+  cancelBtn: {
+    marginTop: 14, paddingVertical: 14, alignItems: 'center',
+    backgroundColor: 'rgba(181,68,90,0.10)',
+    borderRadius: 50,
+  },
+  cancelTxt: {
+    fontSize: 14, fontWeight: '700', color: '#9B6B78',
+  },
 });

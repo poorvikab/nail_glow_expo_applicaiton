@@ -102,56 +102,6 @@ function WaveDivider() {
   );
 }
 
-// ── Nav items ─────────────────────────────────────────────────────────────────
-const NAV_ITEMS = [
-  { label: 'Design', emoji: '✏️', active: true },
-  { label: 'Learn', emoji: '📖', active: false },
-  { label: 'Gallery', emoji: '⊞', active: false },
-  { label: 'Profile', emoji: '👤', active: false },
-];
-
-// ── Bottom Nav Bar ────────────────────────────────────────────────────────────
-function BottomNav({
-  scrollY,
-  router,
-}: {
-  scrollY: Animated.SharedValue<number>;
-  router: ReturnType<typeof useRouter>;
-}) {
-  const navStyle = useAnimatedStyle(() => {
-    const progress = interpolate(scrollY.value, [60, 160], [0, 1], 'clamp');
-    return {
-      opacity: progress,
-      transform: [{ translateY: interpolate(progress, [0, 1], [40, 0]) }],
-    };
-  });
-
-  return (
-    <Animated.View style={[styles.navBar, navStyle]} pointerEvents="box-none">
-      <View style={styles.navInner}>
-        {NAV_ITEMS.map((item) => (
-          <TouchableOpacity
-            key={item.label}
-            style={styles.navItem}
-            activeOpacity={0.75}
-            onPress={() => item.active && router.replace('/tryon')}
-          >
-            {item.active ? (
-              <View style={styles.navActiveCircle}>
-                <Text style={styles.navActiveEmoji}>{item.emoji}</Text>
-              </View>
-            ) : (
-              <Text style={styles.navInactiveEmoji}>{item.emoji}</Text>
-            )}
-            <Text style={[styles.navLabel, item.active && styles.navLabelActive]}>
-              {item.label}
-            </Text>
-          </TouchableOpacity>
-        ))}
-      </View>
-    </Animated.View>
-  );
-}
 
 // ── Main Screen ────────────────────────────────────────────────────────────────
 export default function MainScreen() {
@@ -402,9 +352,6 @@ export default function MainScreen() {
         </View>
 
       </AnimatedScrollView>
-
-      {/* ── Bottom Navigation Bar (appears on scroll) ── */}
-      <BottomNav scrollY={scrollY} router={router} />
     </View>
   );
 }
@@ -727,53 +674,7 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: ROSE_DIM,
     letterSpacing: 2.5,
-    marginBottom: 84,   // clears the floating nav bar + gives breathing room
+    marginBottom: 32,
     marginTop: 8,
   },
-
-  // ── Bottom Navigation Bar
-  navBar: {
-    position: 'absolute',
-    bottom: Platform.OS === 'android' ? 25 : 28,
-    left: 24,
-    right: 24,
-    zIndex: 200,
-    // Ensure touches pass through when invisible
-  },
-  navInner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-around',
-    backgroundColor: '#fff',
-    borderRadius: 50,
-    paddingVertical: 10,
-    paddingHorizontal: 6,
-    shadowColor: '#B5445A',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
-    elevation: 12,
-  },
-  navItem: {
-    alignItems: 'center',
-    paddingHorizontal: 10,
-    gap: 2,
-  },
-  navActiveCircle: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: ROSE,
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: ROSE,
-    shadowOffset: { width: 0, height: 3 },
-    shadowOpacity: 0.38,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  navActiveEmoji: { fontSize: 16 },
-  navInactiveEmoji: { fontSize: 18, color: ROSE_LIGHT },
-  navLabel: { fontSize: 9, fontWeight: '600', color: ROSE_DIM, letterSpacing: 0.3 },
-  navLabelActive: { color: ROSE, fontWeight: '800' },
 });
