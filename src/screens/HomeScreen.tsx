@@ -1,7 +1,8 @@
 import { Audio } from 'expo-av';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import { Dimensions, Platform, StyleSheet, View } from 'react-native';
+import { useAuth } from '../context/AuthContext';
 import Animated, {
   Easing,
   interpolate,
@@ -139,6 +140,42 @@ function GlowStar({
 export default function HomeScreen() {
   const router   = useRouter();
   const soundRef = useRef<Audio.Sound | null>(null);
+  const { session, isLoading } = useAuth();
+
+  // Ref to capture latest auth state at navigation time
+  const authRef = useRef({ session, isLoading });
+  useEffect(() => {
+    authRef.current = { session, isLoading };
+  }, [session, isLoading]);
+
+  /**
+   * Called after the splash animation finishes.
+   * If auth is still loading, wait for it; then route based on session.
+   */
+  const navigateAfterAnimation = useCallback(() => {
+    const go = () => {
+      if (authRef.current.session) {
+        router.replace('/main');
+      } else {
+        router.replace('/onboarding');
+      }
+    };
+
+    if (!authRef.current.isLoading) {
+      go();
+      return;
+    }
+
+    // Auth still loading — poll briefly (max ~3 s) then decide
+    let elapsed = 0;
+    const interval = setInterval(() => {
+      elapsed += 100;
+      if (!authRef.current.isLoading || elapsed >= 3000) {
+        clearInterval(interval);
+        go();
+      }
+    }, 100);
+  }, [router]);
 
   // Word animations
   const nailY = useSharedValue(48);
@@ -201,7 +238,8 @@ export default function HomeScreen() {
 
     // Navigate 1.15 s after dissolve starts (just as it finishes)
     const navTimer = setTimeout(() => {
-      router.replace('/onboarding');
+      // navigateAfterAnimation will be called, which checks auth
+      navigateAfterAnimation();
     }, DISSOLVE_START + 1150);
 
     return () => {

@@ -59,7 +59,7 @@ function ScrollReveal({
   fromY?: number;
   delay?: number;
 }) {
-  const progress    = useSharedValue(0);
+  const progress = useSharedValue(0);
   const hasTriggered = useSharedValue(0);
 
   // Runs entirely on the UI thread — no JS bridge round-trip
@@ -139,7 +139,7 @@ export default function MainScreen() {
           <Text style={styles.floatingLogo}>✦ NailGlow</Text>
           <TouchableOpacity
             style={styles.ctaSmall}
-                        onPress={() => router.replace('/tryon')}
+            onPress={() => router.replace('/tryon')}
             activeOpacity={0.8}
           >
             <Text style={styles.ctaSmallText}>Try Now</Text>
@@ -199,23 +199,23 @@ export default function MainScreen() {
               entering={FadeInUp.delay(700).duration(600)}
               style={styles.heroSub}
             >
-              Design, try on, and share stunning nail art — all from your phone.
+              Design, preview, and save stunning nail art — all from your phone.
             </Animated.Text>
 
             <Animated.View
               entering={FadeInUp.delay(850).duration(500)}
               style={styles.chipRow}
             >
-              <Chip label="AR Try-On" emoji="🪄" />
+              <Chip label="Upload Photos" emoji="🖼️" />
               <Chip label="100+ Styles" emoji="💅" />
-              <Chip label="Share Looks" emoji="✈️" />
+              <Chip label="Save Designs" emoji="✈️" />
             </Animated.View>
 
             <Animated.View entering={FadeInDown.delay(1000).duration(500)}>
               <TouchableOpacity
                 style={styles.heroCta}
                 activeOpacity={0.85}
-                            onPress={() => router.replace('/tryon')}
+                onPress={() => router.replace('/tryon')}
               >
                 <Text style={styles.heroCtaText}>Start Creating  →</Text>
               </TouchableOpacity>
@@ -259,15 +259,15 @@ export default function MainScreen() {
                 resizeMode="cover"
               />
               <View style={styles.galleryPill}>
-                <Text style={styles.galleryPillText}>Live AR Preview</Text>
+                <Text style={styles.galleryPillText}>Live Preview</Text>
               </View>
             </View>
           </ScrollReveal>
 
           {[
-            { num: '01', title: 'Choose a style', desc: 'Browse 100+ curated nail designs — French, ombré, glitter and beyond.' },
-            { num: '02', title: 'Try it on live', desc: 'Point your camera at your hand. See the look instantly with our AR engine.' },
-            { num: '03', title: 'Save & share', desc: 'Capture your fave look and share it or book your salon in one tap.' },
+            { num: '01', title: 'Upload or choose', desc: 'Upload your own nail photos or browse 100+ curated designs — French, ombré, glitter and beyond.' },
+            { num: '02', title: 'Customise freely', desc: 'Pick your perfect colors, patterns, and finishes. Preview the look on your nails in real time.' },
+            { num: '03', title: 'Save your designs', desc: 'Love what you created? Save it to your collection and revisit anytime.' },
           ].map((step, i) => (
             <ScrollReveal
               key={step.num}
@@ -291,20 +291,20 @@ export default function MainScreen() {
         {/* ═══════════════════════════════════════════════════
             SECTION 3 — Share / Social Proof (nail_image3)
         ══════════════════════════════════════════════════════ */}
-        <View style={[styles.section, { minHeight: SECTION_H, backgroundColor: '#FAD4E2', paddingBottom: 45}]}>
+        <View style={[styles.section, { minHeight: SECTION_H, backgroundColor: '#FAD4E2', paddingBottom: 45 }]}>
 
           <ScrollReveal scrollY={scrollY} start={SEC3_START} delay={0}>
             <WaveDivider />
           </ScrollReveal>
 
           <ScrollReveal scrollY={scrollY} start={SEC3_START} delay={80}>
-            <Text style={styles.sectionLabel}>YOUR GLOW MOMENT</Text>
+            <Text style={styles.sectionLabel}>YOUR CREATIONS</Text>
           </ScrollReveal>
 
           <ScrollReveal scrollY={scrollY} start={SEC3_START} delay={160}>
             <Text style={styles.sectionHeading}>
-              Save &amp;{'\n'}
-              <Text style={styles.sectionHeadingAccent}>Share Your Look</Text>
+              Save{'\n'}
+              <Text style={styles.sectionHeadingAccent}>Your Designs</Text>
             </Text>
           </ScrollReveal>
 
@@ -317,23 +317,17 @@ export default function MainScreen() {
               />
               <View style={styles.shareOverlay}>
                 <Text style={styles.shareOverlayTitle}>Ready to Glow? 💅</Text>
-                <Text style={styles.shareOverlaySub}>Capture · Share · Inspire</Text>
+                <Text style={styles.shareOverlaySub}>Create · Save · Revisit</Text>
               </View>
             </View>
           </ScrollReveal>
 
           <ScrollReveal scrollY={scrollY} start={SEC3_START} delay={360}>
-            <View style={styles.statsRow}>
-              {[
-                { val: '50K+', label: 'Looks Shared' },
-                { val: '100+', label: 'Nail Styles' },
-                { val: '4.9 ★', label: 'Avg Rating' },
-              ].map((s) => (
-                <View key={s.label} style={styles.statBox}>
-                  <Text style={styles.statVal}>{s.val}</Text>
-                  <Text style={styles.statLabel}>{s.label}</Text>
-                </View>
-              ))}
+            <View style={styles.testimonialCard}>
+              <Text style={styles.testimonialQuote}>
+                "I uploaded my own photo and played with so many color combos. Saved my top 3 — can't wait to show my nail tech! 🎨"
+              </Text>
+              <Text style={styles.testimonialName}>— Ananya R., Bangalore</Text>
             </View>
           </ScrollReveal>
 

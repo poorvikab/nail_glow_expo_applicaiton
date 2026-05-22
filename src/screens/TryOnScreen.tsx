@@ -27,6 +27,8 @@ import ColorPicker, {
   returnedResults,
 } from 'reanimated-color-picker';
 import Animated, { FadeIn, FadeInDown, FadeInUp, ZoomIn, runOnJS } from 'react-native-reanimated';
+import { useAuth } from '../context/AuthContext';
+import { saveDesignToSupabase } from '../lib/saveDesign';
 
 const { width } = Dimensions.get('window');
 
@@ -155,6 +157,7 @@ function ColorPickerModal({
 // ── Main Screen ────────────────────────────────────────────────────────────────
 export default function TryOnScreen() {
   const router = useRouter();
+  const { session } = useAuth();
 
   const [handPhoto,       setHandPhoto]   = useState<string | null>(null);
   const [photoAspect,     setPhotoAspect] = useState(4 / 3);
@@ -165,6 +168,7 @@ export default function TryOnScreen() {
   const [applying,        setApplying]        = useState(false);
   const [resultPhoto,     setResultPhoto]     = useState<string | null>(null);
   const [changePhotoVisible, setChangePhotoVisible] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (handPhoto) {
@@ -274,27 +278,40 @@ export default function TryOnScreen() {
   const patternRow1 = allPatterns.slice(0, 5);
   const patternRow2 = allPatterns.slice(5, 9); // up to 4 items + "+"
 
-  // ── Save result image to camera roll ─────────────────────────────────────────
+  // ── Save result image: upload to Supabase + save to camera roll ──────────────
   const saveImage = async () => {
     if (!resultPhoto) {
       Alert.alert('Nothing to save', 'Apply a design first to get a result.');
       return;
     }
-    const { status } = await MediaLibrary.requestPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission required', 'Allow photo library access to save your design.');
+    if (!session?.user?.id) {
+      Alert.alert('Not signed in', 'Please restart the app and try again.');
       return;
     }
+    if (isSaving) return;
+    setIsSaving(true);
+
+    const base64 = resultPhoto.replace(/^data:image\/\w+;base64,/, '');
+
     try {
-      const base64 = resultPhoto.replace(/^data:image\/\w+;base64,/, '');
-      const fileUri = (FileSystem.cacheDirectory ?? '') + `nailglow_${Date.now()}.jpg`;
-      await FileSystem.writeAsStringAsync(fileUri, base64, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      await MediaLibrary.saveToLibraryAsync(fileUri);
-      Alert.alert('Saved ✓', 'Your nail design has been saved to your gallery!');
+      // 1. Upload to Supabase Storage + insert into designs table
+      await saveDesignToSupabase(base64, session.user.id);
+
+      // 2. Also save to local gallery
+      const { status } = await MediaLibrary.requestPermissionsAsync();
+      if (status === 'granted') {
+        const fileUri = (FileSystem.cacheDirectory ?? '') + `nailglow_${Date.now()}.jpg`;
+        await FileSystem.writeAsStringAsync(fileUri, base64, {
+          encoding: FileSystem.EncodingType.Base64,
+        });
+        await MediaLibrary.saveToLibraryAsync(fileUri);
+      }
+
+      Alert.alert('Saved ✓', 'Your nail design has been saved!');
     } catch (err: any) {
-      Alert.alert('Error', err.message ?? 'Could not save image');
+      Alert.alert('Save failed', err.message ?? 'Could not save your design. Please try again.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -481,8 +498,20 @@ export default function TryOnScreen() {
         {/* ── Save Button ── */}
         {resultPhoto && (
           <Animated.View entering={FadeInUp.duration(320)} style={styles.saveWrap}>
-            <TouchableOpacity style={styles.saveBtn} onPress={saveImage} activeOpacity={0.87}>
-              <Text style={styles.saveBtnText}>Save Design</Text>
+            <TouchableOpacity
+              style={[styles.saveBtn, isSaving && styles.saveBtnDisabled]}
+              onPress={saveImage}
+              activeOpacity={0.87}
+              disabled={isSaving}
+            >
+              {isSaving ? (
+                <View style={styles.saveBtnInner}>
+                  <ActivityIndicator color="#fff" size="small" />
+                  <Text style={styles.saveBtnText}>Saving…</Text>
+                </View>
+              ) : (
+                <Text style={styles.saveBtnText}>Save Design</Text>
+              )}
             </TouchableOpacity>
           </Animated.View>
         )}
@@ -613,6 +642,8 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.28, shadowRadius: 14, elevation: 7,
   },
   saveBtnText: { fontSize: 15, fontWeight: '800', color: WHITE, letterSpacing: 0.6 },
+  saveBtnDisabled: { opacity: 0.7 },
+  saveBtnInner: { flexDirection: 'row', alignItems: 'center', gap: 10 },
 
   // Tagline — matches MainScreen footer style
   tagline: {
