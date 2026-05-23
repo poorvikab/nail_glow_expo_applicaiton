@@ -1,8 +1,7 @@
 import { Audio } from 'expo-av';
 import { useRouter } from 'expo-router';
-import React, { useEffect, useRef, useCallback } from 'react';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { Dimensions, Platform, StyleSheet, View } from 'react-native';
-import { useAuth } from '../context/AuthContext';
 import Animated, {
   Easing,
   interpolate,
@@ -14,6 +13,7 @@ import Animated, {
   withSpring,
   withTiming,
 } from 'react-native-reanimated';
+import { useAuth } from '../context/AuthContext';
 
 const { width, height } = Dimensions.get('window');
 
@@ -138,7 +138,7 @@ function GlowStar({
 
 // ── Main Screen ────────────────────────────────────────────────────────────
 export default function HomeScreen() {
-  const router   = useRouter();
+  const router = useRouter();
   const soundRef = useRef<Audio.Sound | null>(null);
   const { session, isLoading } = useAuth();
 
@@ -197,10 +197,10 @@ export default function HomeScreen() {
   }));
 
   // Dissolve-out: content floats up and fades before navigating
-  const dissolveOp    = useSharedValue(1);
+  const dissolveOp = useSharedValue(1);
   const dissolveScale = useSharedValue(1);
   const dissolveStyle = useAnimatedStyle(() => ({
-    opacity:   dissolveOp.value,
+    opacity: dissolveOp.value,
     transform: [{ scale: dissolveScale.value }],
   }));
 
@@ -224,16 +224,16 @@ export default function HomeScreen() {
 
     // Dot + stars pop in together
     const t = setTimeout(() => {
-      dotReveal.value   = withSpring(1, { damping: 8, stiffness: 220 });
+      dotReveal.value = withSpring(1, { damping: 8, stiffness: 220 });
       starsReveal.value = 1;
     }, DOT_START);
 
     // Dissolve-out: starts 2.5 s after the dot appears
     const DISSOLVE_START = DOT_START + 2500;
     const dissolveTimer = setTimeout(() => {
-      dissolveOp.value    = withTiming(0,    { duration: 1100, easing: Easing.in(Easing.ease) });
+      dissolveOp.value = withTiming(0, { duration: 1100, easing: Easing.in(Easing.ease) });
       dissolveScale.value = withTiming(0.92, { duration: 1100, easing: Easing.in(Easing.ease) });
-      starsReveal.value   = withTiming(0,    { duration: 700  });
+      starsReveal.value = withTiming(0, { duration: 700 });
     }, DISSOLVE_START);
 
     // Navigate 1.15 s after dissolve starts (just as it finishes)

@@ -1,5 +1,7 @@
 import { useRouter } from 'expo-router';
 import React from 'react';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 import {
   Dimensions,
   Image,
@@ -106,7 +108,27 @@ function WaveDivider() {
 // ── Main Screen ────────────────────────────────────────────────────────────────
 export default function MainScreen() {
   const router = useRouter();
+  const { session } = useAuth();
   const scrollY = useSharedValue(0);
+  const [hasSavedDesigns, setHasSavedDesigns] = React.useState(false);
+
+  React.useEffect(() => {
+    if (!session?.user?.id) return;
+    const checkDesigns = async () => {
+      try {
+        const { count, error } = await supabase
+          .from('designs')
+          .select('id', { count: 'exact', head: true })
+          .eq('user_id', session.user.id);
+        if (!error && count && count > 0) {
+          setHasSavedDesigns(true);
+        }
+      } catch (e) {
+        // ignore
+      }
+    };
+    checkDesigns();
+  }, [session?.user?.id]);
 
   const scrollHandler = useAnimatedScrollHandler({
     onScroll: (e) => { scrollY.value = e.contentOffset.y; },
@@ -219,6 +241,18 @@ export default function MainScreen() {
               >
                 <Text style={styles.heroCtaText}>Start Creating  →</Text>
               </TouchableOpacity>
+
+              {hasSavedDesigns && (
+                <TouchableOpacity
+                  style={[styles.heroCta, { marginTop: 15 }]}
+                  activeOpacity={0.85}
+                  onPress={() => router.push('/designs')}
+                >
+                  <Text style={styles.heroCtaText}>
+                    Saved Designs  <Text style={{ color: '#E84E7A' }}>♥</Text>
+                  </Text>
+                </TouchableOpacity>
+              )}
             </Animated.View>
           </View>
 
@@ -464,7 +498,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 10,
-    marginBottom: 28,
+    marginBottom: 16,
   },
   chip: {
     flexDirection: 'row',
@@ -485,6 +519,9 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 36,
     alignSelf: 'flex-start',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 195,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.20,

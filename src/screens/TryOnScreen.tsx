@@ -189,15 +189,23 @@ export default function TryOnScreen() {
       form.append('opacity', '0.82');
 
       if (patternKey) {
-        const allPatterns = [
-          ...PRESET_PATTERNS,
-          ...customPatterns.map(uri => ({ key: `custom-${uri}`, src: { uri } })),
-        ];
-        const pat = allPatterns.find(p => p.key === patternKey);
-        if (pat) {
-          const src = pat.src as any;
-          const uri = src.uri ?? Image.resolveAssetSource(src).uri;
-          form.append('pattern', { uri, name: uri.split('/').pop() ?? 'pattern.png', type: 'image/png' } as any);
+        let uri = '';
+        if (patternKey.startsWith('custom-')) {
+          uri = patternKey.replace('custom-', '');
+        } else {
+          const pat = PRESET_PATTERNS.find(p => p.key === patternKey);
+          if (pat) {
+            const src = pat.src as any;
+            uri = Image.resolveAssetSource(src).uri;
+          }
+        }
+
+        if (uri) {
+          form.append('pattern', {
+            uri,
+            name: uri.split('/').pop() ?? 'pattern.png',
+            type: 'image/png',
+          } as any);
         }
       } else if (color) {
         form.append('color', color);
@@ -237,18 +245,29 @@ export default function TryOnScreen() {
   };
 
   const pickHand = async (fromCamera = false) => {
-    if (fromCamera) {
-      const { status } = await ImagePicker.requestCameraPermissionsAsync();
-      if (status !== 'granted') return;
-      const r = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [4, 3], quality: 0.9 });
-      if (!r.canceled) setHandPhoto(r.assets[0].uri);
-    } else {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (status !== 'granted') return;
-      const r = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [4, 3], quality: 0.9 });
-      if (!r.canceled) setHandPhoto(r.assets[0].uri);
+    try {
+      if (fromCamera) {
+        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'Camera permission is required to take a photo.');
+          return;
+        }
+        const r = await ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [4, 3], quality: 0.9 });
+        if (!r.canceled) setHandPhoto(r.assets[0].uri);
+      } else {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Permission Denied', 'Gallery permission is required to choose a photo.');
+          return;
+        }
+        const r = await ImagePicker.launchImageLibraryAsync({ allowsEditing: true, aspect: [4, 3], quality: 0.9 });
+        if (!r.canceled) setHandPhoto(r.assets[0].uri);
+      }
+    } catch (err: any) {
+      Alert.alert('Error', err?.message ?? 'Could not launch camera or gallery.');
     }
   };
+
 
   const pickPattern = async () => {
     const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -291,23 +310,38 @@ export default function TryOnScreen() {
     if (isSaving) return;
     setIsSaving(true);
 
-    const base64 = resultPhoto.replace(/^data:image\/\w+;base64,/, '');
+    // Guard: ensure we can extract base64 data
+    const base64Match = resultPhoto.match(/^data:image\/\w+;base64,(.+)$/);
+    if (!base64Match || !base64Match[1]) {
+      Alert.alert('Save failed', 'Could not read the result image. Please try applying the design again.');
+      setIsSaving(false);
+      return;
+    }
+    const base64 = base64Match[1];
 
     try {
       // 1. Upload to Supabase Storage + insert into designs table
       await saveDesignToSupabase(base64, session.user.id);
 
-      // 2. Also save to local gallery
-      const { status } = await MediaLibrary.requestPermissionsAsync();
-      if (status === 'granted') {
-        const fileUri = (FileSystem.cacheDirectory ?? '') + `nailglow_${Date.now()}.jpg`;
-        await FileSystem.writeAsStringAsync(fileUri, base64, {
-          encoding: FileSystem.EncodingType.Base64,
-        });
-        await MediaLibrary.saveToLibraryAsync(fileUri);
+      // 2. Also save to local gallery (best-effort — don't block navigation)
+      try {
+        const { status } = await MediaLibrary.requestPermissionsAsync();
+        if (status === 'granted') {
+          const cacheDir = FileSystem.cacheDirectory;
+          if (cacheDir) {
+            const fileUri = cacheDir + `nailglow_${Date.now()}.jpg`;
+            await FileSystem.writeAsStringAsync(fileUri, base64, {
+              encoding: 'base64' as any,
+            });
+            await MediaLibrary.saveToLibraryAsync(fileUri);
+          }
+        }
+      } catch {
+        // Gallery save is optional; Supabase already has the image
       }
 
-      Alert.alert('Saved ✓', 'Your nail design has been saved!');
+      // 3. Navigate to the Your Designs page
+      router.push('/designs');
     } catch (err: any) {
       Alert.alert('Save failed', err.message ?? 'Could not save your design. Please try again.');
     } finally {
@@ -360,38 +394,45 @@ export default function TryOnScreen() {
         onSelect={handleColorPickerSelect}
       />
 
-      {/* ── Change Photo Sheet ── */}
-      <Modal visible={changePhotoVisible} transparent animationType="fade" onRequestClose={() => setChangePhotoVisible(false)}>
-        <TouchableWithoutFeedback onPress={() => setChangePhotoVisible(false)}>
-          <View style={cst.backdrop} />
-        </TouchableWithoutFeedback>
-        <View style={cst.card}>
-          <View style={cst.handle} />
-          <Text style={cst.title}>Change Photo</Text>
-          <TouchableOpacity
-            style={cst.option}
-            activeOpacity={0.8}
-            onPress={() => { setChangePhotoVisible(false); pickHand(true); }}
-          >
-            <Text style={cst.optionText}>Camera</Text>
-          </TouchableOpacity>
-          <View style={cst.divider} />
-          <TouchableOpacity
-            style={cst.option}
-            activeOpacity={0.8}
-            onPress={() => { setChangePhotoVisible(false); pickHand(false); }}
-          >
-            <Text style={cst.optionText}>Gallery</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={cst.cancelBtn}
-            activeOpacity={0.8}
-            onPress={() => setChangePhotoVisible(false)}
-          >
-            <Text style={cst.cancelTxt}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      </Modal>
+      {/* ── Change Photo Modal (Pure JS Overlay) ── */}
+      {changePhotoVisible && (
+        <Animated.View entering={FadeIn.duration(200)} style={[StyleSheet.absoluteFill, { zIndex: 999, justifyContent: 'center', alignItems: 'center' }]}>
+          <TouchableWithoutFeedback onPress={() => setChangePhotoVisible(false)}>
+            <View style={cst.backdrop} />
+          </TouchableWithoutFeedback>
+          <Animated.View entering={ZoomIn.duration(250).springify()} style={cst.card}>
+            <Text style={cst.title}>Change Photo</Text>
+            <TouchableOpacity
+              style={cst.option}
+              activeOpacity={0.85}
+              onPress={() => {
+                setChangePhotoVisible(false);
+                pickHand(true);
+              }}
+            >
+              <Text style={cst.optionText}>Camera 📷</Text>
+            </TouchableOpacity>
+            <View style={cst.divider} />
+            <TouchableOpacity
+              style={cst.option}
+              activeOpacity={0.85}
+              onPress={() => {
+                setChangePhotoVisible(false);
+                pickHand(false);
+              }}
+            >
+              <Text style={cst.optionText}>Gallery 🖼️</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={cst.cancelBtn}
+              activeOpacity={0.85}
+              onPress={() => setChangePhotoVisible(false)}
+            >
+              <Text style={cst.cancelTxt}>Cancel</Text>
+            </TouchableOpacity>
+          </Animated.View>
+        </Animated.View>
+      )}
 
       {/* ── Header ── */}
       <Animated.View entering={FadeInDown.duration(380)} style={styles.header}>
@@ -689,29 +730,36 @@ const mst = StyleSheet.create({
   addTxt: { fontSize: 14, fontWeight: '700', color: WHITE },
 });
 
-// ── Change Photo Modal Styles ──────────────────────────────────────────────────
 const cst = StyleSheet.create({
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
   backdrop: {
-    flex: 1, backgroundColor: 'rgba(42,16,16,0.50)',
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(42,16,16,0.60)',
   },
   card: {
     backgroundColor: '#FFF0F5',
-    borderTopLeftRadius: 28, borderTopRightRadius: 28,
+    borderRadius: 24,
+    width: width * 0.82,
     paddingHorizontal: 20,
-    paddingBottom: Platform.OS === 'ios' ? 36 : 24,
-    paddingTop: 14,
-    borderTopWidth: 1.5, borderColor: 'rgba(181,68,90,0.15)',
-  },
-  handle: {
-    width: 38, height: 4, borderRadius: 2,
-    backgroundColor: '#D4748A', alignSelf: 'center', marginBottom: 16,
+    paddingVertical: 22,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.2,
+    shadowRadius: 16,
+    elevation: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(181,68,90,0.15)',
   },
   title: {
-    fontSize: 15, fontWeight: '800', color: '#2A1010',
-    textAlign: 'center', marginBottom: 16, letterSpacing: 0.3,
+    fontSize: 16, fontWeight: '800', color: '#2A1010',
+    textAlign: 'center', marginBottom: 18, letterSpacing: 0.3,
   },
   option: {
-    paddingVertical: 15, alignItems: 'center',
+    paddingVertical: 14, alignItems: 'center',
     backgroundColor: '#FFE8F2',
     borderRadius: 16,
     borderWidth: 1, borderColor: 'rgba(181,68,90,0.18)',

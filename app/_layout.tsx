@@ -14,6 +14,7 @@ export default function RootLayout() {
           <Stack.Screen name="main" />
           <Stack.Screen name="studio" />
           <Stack.Screen name="tryon" />
+          <Stack.Screen name="designs" />
         </Stack>
         <StatusBar style="dark" backgroundColor="#FDE8EF" />
       </GestureHandlerRootView>
